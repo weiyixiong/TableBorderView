@@ -1,6 +1,7 @@
 package com.wyx.tableviewlib;
 
 import android.content.Context;
+import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -25,20 +26,20 @@ public class TableBorderLayout extends ViewGroup {
   private List<Integer> rowHeight;
   private List<Integer> colWidth;
   private short[][] eraseBorder;
+  private int[] colWeight;
+  private int[] rowWeight;
   private boolean fastDrawBorder = true;
-  private int strokeWidth = 5;
+  private int strokeWidth = 2;
 
   private int borderColor = Color.LTGRAY;
   private Paint borderPaint;
 
+  /**
+   * 使用说明:如果是宽度是match_parent需要设置weight,否则默认均分,
+   * 如果是wrap_content,则会根据子View自动调节大小
+   */
   public TableBorderLayout(Context context) {
     this(context, null);
-  }
-
-  public TableBorderLayout(Context context, int rowCount, int colCount) {
-    this(context, null);
-    this.rowCount = rowCount;
-    this.colCount = colCount;
   }
 
   public TableBorderLayout(Context context, AttributeSet attrs) {
@@ -47,6 +48,13 @@ public class TableBorderLayout extends ViewGroup {
 
   public TableBorderLayout(Context context, AttributeSet attrs, int defStyleAttr) {
     super(context, attrs, defStyleAttr);
+    TypedArray array = context.obtainStyledAttributes(attrs, R.styleable.TableBorderLayout);
+    borderColor = array.getColor(R.styleable.TableBorderLayout_tableborderColor, Color.LTGRAY);
+    strokeWidth = (int) array.getDimension(R.styleable.TableBorderLayout_tableborderWidth, 2);
+    rowCount = array.getInteger(R.styleable.TableBorderLayout_tablerowcount, 0);
+    colCount = array.getInteger(R.styleable.TableBorderLayout_tablecolcount, 0);
+    array.recycle();
+
     init();
   }
 
@@ -59,7 +67,7 @@ public class TableBorderLayout extends ViewGroup {
     initPaint();
     this.colWidth = new ArrayList<>();
     this.rowHeight = new ArrayList<>();
-    this.eraseBorder = new short[rowCount][colCount];
+    setRowColCount(rowCount, colCount);
   }
 
   private void initPaint() {
@@ -71,17 +79,45 @@ public class TableBorderLayout extends ViewGroup {
     borderPaint.setAntiAlias(true);
   }
 
+  public void setRowColCount(int rowCount, int colCount) {
+    this.rowCount = rowCount;
+    this.colCount = colCount;
+    this.eraseBorder = new short[rowCount][colCount];
+    this.colWeight = new int[colCount];
+    this.rowWeight = new int[rowCount];
+    initWeight(colWeight);
+    initWeight(rowWeight);
+    requestLayout();
+  }
+
   @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-    int measuredWidth = MeasureSpec.getSize(widthMeasureSpec);
     int childWidthMeasureSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
-    int measuredHeight = strokeWidth;
-    int rowHighest = 0;
+    int measuredHeight = MeasureSpec.getSize(heightMeasureSpec);
+    int measuredWidth = MeasureSpec.getSize(widthMeasureSpec);
+
     rowHeight.clear();
     colWidth.clear();
+    if (MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.EXACTLY) {
+      int widthSum = getSum(colWeight);
+      int fullWidth = measuredWidth - (colCount + 1) * strokeWidth;
+      for (int i = 0; i < colCount; i++) {
+        colWidth.add(fullWidth / widthSum * colWeight[i]);
+      }
+    }
+
+    if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
+
+      int heightSum = getSum(rowWeight);
+      int fullHeight = measuredHeight - (rowCount + 1) * strokeWidth;
+
+      for (int i = 0; i < rowCount; i++) {
+        rowHeight.add(fullHeight / heightSum * rowWeight[i]);
+      }
+    }
+    int rowHighest = 0;
     for (int i = 0; i < Math.min(getChildCount(), rowCount * colCount); i++) {
       View mItem = getChildAt(i);
-
-      ViewGroup.LayoutParams params = mItem.getLayoutParams();
+      LayoutParams params = mItem.getLayoutParams();
       if (mItem.getVisibility() == View.GONE) {
         mItem.measure(childWidthMeasureSpec, MeasureSpec.makeMeasureSpec(0, MeasureSpec.EXACTLY));
       } else if (params != null && params.height >= 0) {
@@ -92,18 +128,21 @@ public class TableBorderLayout extends ViewGroup {
         rowHighest = Math.max(getChildAt(i).getMeasuredHeight(), rowHighest);
       }
       int colIndex = i % colCount;
-      if (colIndex == colCount - 1) {
-        measuredHeight += rowHighest;
-        measuredHeight += strokeWidth;
-        rowHeight.add(rowHighest);
-        rowHighest = 0;
+      if (MeasureSpec.getMode(heightMeasureSpec) != MeasureSpec.EXACTLY) {
+        if (colIndex == colCount - 1) {
+          rowHeight.add(rowHighest);
+          rowHighest = 0;
+        }
       }
-      if (colWidth.size() <= colIndex || colWidth.get(colIndex) == null) {
-        colWidth.add(mItem.getMeasuredWidth());
-      } else if (colWidth.get(colIndex) < mItem.getMeasuredWidth()) {
-        colWidth.set(colIndex, mItem.getMeasuredWidth());
+      if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.EXACTLY) {
+        if (colWidth.size() <= colIndex || colWidth.get(colIndex) == null) {
+          colWidth.add(mItem.getMeasuredWidth());
+        } else if (colWidth.get(colIndex) < mItem.getMeasuredWidth()) {
+          colWidth.set(colIndex, mItem.getMeasuredWidth());
+        }
       }
     }
+
     int rowIndex = 0;
     for (int i = 0; i < Math.min(getChildCount(), rowCount * colCount); i++) {
       View mItem = getChildAt(i);
@@ -114,7 +153,7 @@ public class TableBorderLayout extends ViewGroup {
           MeasureSpec.makeMeasureSpec(rowHeight.get(rowIndex), MeasureSpec.EXACTLY));
     }
 
-    setMeasuredDimension(getTableWidth(), measuredHeight);
+    setMeasuredDimension(getTableWidth(), getTableHeight());
   }
 
   @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
@@ -140,6 +179,14 @@ public class TableBorderLayout extends ViewGroup {
       return;
     }
     drawBorder(canvas);
+  }
+
+  public void setColWeight(int colIndex, int weight) {
+    colWeight[colIndex] = weight;
+  }
+
+  public void setRowWeight(int rowIndex, int weight) {
+    rowWeight[rowIndex] = weight;
   }
 
   public void eraseBorder(int x, int y, short border) {
@@ -192,6 +239,26 @@ public class TableBorderLayout extends ViewGroup {
       }
       endX = strokeWidth / 2;
       startX = strokeWidth / 2;
+    }
+  }
+
+  private int getSum(int[] weights) {
+    int res = 0;
+    for (int weight : weights) {
+      res += weight;
+    }
+    if (res == 0) {
+      initWeight(weights);
+    }
+    return res == 0 ? weights.length : res;
+  }
+
+  /**
+   * 默认Weight初始化为1,也就是平分
+   */
+  private void initWeight(int[] weights) {
+    for (int i = 0; i < weights.length; i++) {
+      weights[i] = 1;
     }
   }
 
@@ -267,6 +334,7 @@ public class TableBorderLayout extends ViewGroup {
 
   public void setStrokeWidth(int strokeWidth) {
     this.strokeWidth = strokeWidth;
+    requestLayout();
   }
 
   public int getBorderColor() {
@@ -275,12 +343,7 @@ public class TableBorderLayout extends ViewGroup {
 
   public void setBorderColor(int borderColor) {
     this.borderColor = borderColor;
-  }
-
-  public void setRowColCount(int rowCount, int colCount) {
-    this.rowCount = rowCount;
-    this.colCount = colCount;
-    this.eraseBorder = new short[rowCount][colCount];
+    requestLayout();
   }
 
   public int getRowCount() {
@@ -291,3 +354,4 @@ public class TableBorderLayout extends ViewGroup {
     return colCount;
   }
 }
+

@@ -55,8 +55,6 @@ public class MainActivity extends AppCompatActivity {
         tableView.setStrokeWidth(5 * progress);
         finalTest.setTextSize(5 * progress);
         tableView.setBorderColor(Color.parseColor("#" + getRandColorCode()));
-        tableView.requestLayout();
-        tableView.invalidate();
       }
 
       @Override public void onStartTrackingTouch(SeekBar seekBar) {

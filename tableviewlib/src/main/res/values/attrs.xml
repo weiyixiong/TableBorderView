@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <declare-styleable name="TableBorderLayout">
+    <attr name="tableborderColor" format="color"/>
+    <attr name="tableborderWidth" format="dimension"/>
+    <attr name="tablerowcount" format="integer"/>
+    <attr name="tablecolcount" format="integer"/>
+  </declare-styleable>
+</resources>
